@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nfs-watcher.fullname" . }}
+  labels:
+    {{- include "nfs-watcher.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "nfs-watcher.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "nfs-watcher.name" . }}
+    spec:
+      securityContext:
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+      containers:
+        - name: watcher
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: nfs-in
+              mountPath: {{ .Values.watch.dir }}
+            - name: nfs-out
+              mountPath: {{ .Values.target.dir }}
+      volumes:
+        - name: nfs-in
+          persistentVolumeClaim:
+            claimName: nfs-in-pvc
+        - name: nfs-out
+          persistentVolumeClaim:
+            claimName: nfs-out-pvc
+      

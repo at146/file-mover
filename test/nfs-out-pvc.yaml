@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-nfs-development-light-data-out
+  # name: nfs-out-pvc
+spec:
+  storageClassName: nfs-development-light-data-out
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: ""

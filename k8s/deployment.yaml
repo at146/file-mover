@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: file-mover
+  labels:
+    app: file-mover
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: file-mover
+  template:
+    metadata:
+      labels:
+        app: file-mover
+    spec:
+      containers:
+        - name: file-mover
+          image: proget.isod.ic/docker.io/file-mover:latest
+          # Default Always
+          # imagePullPolicy: IfNotPresent
+          env:
+            - name: SOURCE_DIR
+              value: "/development/Light_Data/test-in"
+            - name: TARGET_DIR
+              value: "/development/Light_Data/test-out"
+            - name: STABLE_SECONDS
+              value: "3"
+            - name: POLL_INTERVAL
+              value: "5"
+            - name: TRIGGER_FILE
+              value: "triger.txt"
+            - name: RETRY_COUNT
+              value: "3"
+            - name: RETRY_DELAY
+              value: "2"
+            - name: MANIFEST_PREFIX
+              value: "manifest"
+          volumeMounts:
+            - name: development
+              mountPath: /development/Light_Data
+      restartPolicy: OnFailure
+      volumes:
+        - name: development
+          nfs:
+            server: development.isod.ic
+            path: /Light_Data
+            readOnly: false

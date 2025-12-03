@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nfs-file-mover-cron
+spec:
+  schedule: "0 18 * * *"  # каждый день в 18:00 UTC
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: watcher
+              image: myrepo/nfs-watcher:latest
+              command: ["python3", "/app/mount_and_watch.py"]
+              env:
+                - name: SOURCE_DIR
+                  value: "/nfs/in"
+                - name: TARGET_DIR
+                  value: "/nfs/out"
+                - name: STABLE_SECONDS
+                  value: "3"
+                - name: POLL_INTERVAL
+                  value: "1"
+              volumeMounts:
+                - name: nfs-in
+                  mountPath: /nfs/in
+                - name: nfs-out
+                  mountPath: /nfs/out
+          restartPolicy: OnFailure
+          volumes:
+            - name: nfs-in
+              persistentVolumeClaim:
+                claimName: pvc-nfs-development-light-data-xxx
+            - name: nfs-out
+              persistentVolumeClaim:
+                claimName: pvc-nfs-development-light-data-out
