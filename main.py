@@ -178,8 +178,15 @@ def wait_for_trigger() -> str:
 
 
 def process_files_once(check_stable: bool = True) -> None:
-    """Однократная обработка файлов: манифест + копирование."""
+    """Однократная обработка файлов: манифест + копирование.
+
+    Если файлов нет вообще, то ничего не делаем (не создаём манифест).
+    """
     ok, failed, entries = build_manifest(check_stable=check_stable)
+    if ok == 0 and failed == 0:
+        logging.info("В исходной директории нет файлов, действий не требуется.")
+        return
+
     manifest_path = write_manifest(entries)
     copied_found, copied_ok, copied_failed = copy_all_files(check_stable=check_stable)
     logging.info(
