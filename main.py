@@ -29,6 +29,7 @@ TRIGGER_FILE = os.getenv("TRIGGER_FILE", "triger.txt")
 RETRY_COUNT = int(os.getenv("RETRY_COUNT", "3"))
 RETRY_DELAY = int(os.getenv("RETRY_DELAY", "2"))
 MANIFEST_PREFIX = os.getenv("MANIFEST_PREFIX", "manifest")
+RUN_MODE = os.getenv("RUN_MODE", "trigger").lower()  # trigger | cron
 
 
 def setup_logging() -> None:
@@ -130,7 +131,11 @@ def copy_with_hash(src: str, dst: str, check_stable: bool = True) -> bool:
             shutil.copy2(src, dst)
             os.remove(src)
             logging.info(
-                "Файл скопирован %s -> %s (попытка %s, hash=%s)", src, dst, attempt, src_hash
+                "Файл скопирован %s -> %s (попытка %s, hash=%s)",
+                src,
+                dst,
+                attempt,
+                src_hash,
             )
             return True
         except Exception as exc:  # pylint: disable=broad-except
@@ -172,33 +177,65 @@ def wait_for_trigger() -> str:
     return os.path.join(SOURCE_DIR, TRIGGER_FILE)
 
 
-def main() -> None:
-    setup_logging()
+def process_files_once(check_stable: bool = True) -> None:
+    """Однократная обработка файлов: манифест + копирование."""
+    ok, failed, entries = build_manifest(check_stable=check_stable)
+    manifest_path = write_manifest(entries)
+    copied_found, copied_ok, copied_failed = copy_all_files(check_stable=check_stable)
     logging.info(
-        "Старт. SOURCE_DIR=%s TARGET_DIR=%s TRIGGER_FILE=%s",
-        SOURCE_DIR,
-        TARGET_DIR,
-        TRIGGER_FILE,
+        "Сводка: файлов всего=%s успешно=%s ошибки=%s; манифест=%s (успешно=%s ошибки=%s)",
+        copied_found,
+        copied_ok,
+        copied_failed,
+        manifest_path,
+        ok,
+        failed,
     )
+
+
+def run_trigger_loop() -> None:
+    """Режим ожидания триггер-файла в бесконечном цикле."""
     trigger_path = wait_for_trigger()
+    logging.info("Запуск в режиме trigger, триггер=%s", trigger_path)
     while True:
         if os.path.isfile(trigger_path) and wait_for_stable_file(trigger_path):
             logging.info("Обнаружен триггер %s", trigger_path)
-            ok, failed, entries = build_manifest(check_stable=False)
-            manifest_path = write_manifest(entries)
-            copied_found, copied_ok, copied_failed = copy_all_files(check_stable=False)
-            logging.info(
-                "Сводка: файлов всего=%s успешно=%s ошибки=%s; манифест=%s (успешно=%s ошибки=%s)",
-                copied_found,
-                copied_ok,
-                copied_failed,
-                manifest_path,
-                ok,
-                failed,
-            )
-            os.remove(trigger_path)
-            logging.info("Триггер %s удалён", trigger_path)
+            process_files_once(check_stable=True)
+            try:
+                os.remove(trigger_path)
+                logging.info("Триггер %s удалён", trigger_path)
+            except OSError as exc:
+                logging.error("Не удалось удалить триггер %s: %s", trigger_path, exc)
         time.sleep(POLL_INTERVAL)
+
+
+def main() -> None:
+    setup_logging()
+    logging.info(
+        "Старт. SOURCE_DIR=%s TARGET_DIR=%s TRIGGER_FILE=%s RUN_MODE=%s",
+        SOURCE_DIR,
+        TARGET_DIR,
+        TRIGGER_FILE,
+        RUN_MODE,
+    )
+
+    if RUN_MODE not in ("cron", "trigger"):
+        logging.error(
+            "Некорректное значение RUN_MODE=%s, ожидается 'cron' или 'trigger'. "
+            "Завершаем работу с ошибкой.",
+            RUN_MODE,
+        )
+        sys.exit(1)
+
+    if RUN_MODE == "cron":
+        # Для работы по крону: один запуск обработки и завершение.
+        logging.info("Работаем в режиме cron: один проход и выход.")
+        process_files_once(check_stable=True)
+        logging.info("Завершение работы (cron-запуск).")
+    else:
+        # Режим trigger: ожидания триггер-файла.
+        logging.info("Работаем в режиме trigger (режим по умолчанию).")
+        run_trigger_loop()
 
 
 if __name__ == "__main__":

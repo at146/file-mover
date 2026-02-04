@@ -24,6 +24,8 @@ spec:
                   value: "3"
                 - name: POLL_INTERVAL
                   value: "1"
+                - name: RUN_MODE
+                  value: "cron"
               volumeMounts:
                 - name: development
                   mountPath: /development/Light_Data
