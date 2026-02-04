@@ -33,4 +33,3 @@ spec:
         - name: nfs-out
           persistentVolumeClaim:
             claimName: nfs-out-pvc
-      
