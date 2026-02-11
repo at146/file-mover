@@ -25,7 +25,7 @@ TARGET_DIR = get_env_var("TARGET_DIR")
 
 STABLE_SECONDS = int(os.getenv("STABLE_SECONDS", "3"))
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "1"))
-TRIGGER_FILE = os.getenv("TRIGGER_FILE", "triger.txt")
+TRIGGER_FILE = os.getenv("TRIGGER_FILE", "trigger.txt")
 RETRY_COUNT = int(os.getenv("RETRY_COUNT", "3"))
 RETRY_DELAY = int(os.getenv("RETRY_DELAY", "2"))
 MANIFEST_PREFIX = os.getenv("MANIFEST_PREFIX", "manifest")

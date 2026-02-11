@@ -25,7 +25,7 @@ spec:
                 - name: POLL_INTERVAL
                   value: "5"
                 - name: TRIGGER_FILE
-                  value: "triger.txt"
+                  value: "trigger.txt"
                 - name: RETRY_COUNT
                   value: "3"
                 - name: RETRY_DELAY
