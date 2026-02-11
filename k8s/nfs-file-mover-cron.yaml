@@ -34,6 +34,10 @@ spec:
                   value: "manifest"
                 - name: RUN_MODE
                   value: "cron"
+                - name: SMB_USERNAME
+                  value: ""
+                - name: SMB_PASSWORD
+                  value: ""
               volumeMounts:
                 - name: development
                   mountPath: /development/Light_Data

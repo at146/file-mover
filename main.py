@@ -6,6 +6,12 @@ import shutil
 import sys
 import time
 from typing import Dict, Iterable, List, Tuple
+from urllib.parse import urlparse
+
+try:
+    import smbclient  # type: ignore
+except ImportError:
+    smbclient = None
 
 
 def get_env_var(name: str) -> str:
@@ -30,6 +36,87 @@ RETRY_COUNT = int(os.getenv("RETRY_COUNT", "3"))
 RETRY_DELAY = int(os.getenv("RETRY_DELAY", "2"))
 MANIFEST_PREFIX = os.getenv("MANIFEST_PREFIX", "manifest")
 RUN_MODE = os.getenv("RUN_MODE", "trigger").lower()  # trigger | cron
+
+# SMB учетные данные (опционально)
+SMB_USERNAME = os.getenv("SMB_USERNAME")
+SMB_PASSWORD = os.getenv("SMB_PASSWORD")
+
+
+def is_smb_path(path: str) -> bool:
+    """Проверить, является ли путь SMB путём."""
+    return path.lower().startswith("smb://")
+
+
+def parse_smb_path(path: str) -> tuple:
+    """Разобрать SMB путь вида smb://host/share/path/file.
+
+    Вернёт кортеж (host, share, path_on_share).
+    """
+    parsed = urlparse(path)
+    if parsed.scheme.lower() != "smb":
+        raise ValueError(f"Ожидается SMB путь, получен: {path}")
+
+    host = parsed.netloc
+    parts = parsed.path.strip("/").split("/", 1)
+    if len(parts) < 2:
+        raise ValueError(
+            f"Некорректный SMB путь: {path}. Ожидается smb://host/share/path"
+        )
+
+    share = parts[0]
+    path_on_share = "/" + parts[1] if len(parts) > 1 else "/"
+
+    return host, share, path_on_share
+
+
+def smb_makedirs(smb_path: str) -> None:
+    """Создать директории на SMB с опциональной аутентификацией."""
+    if not smbclient:
+        raise ImportError(
+            "smbprotocol не установлен. Установите: pip install smbprotocol"
+        )
+
+    host, share, path_on_share = parse_smb_path(smb_path)
+    parent = os.path.dirname(path_on_share).rstrip("/")
+
+    if not parent or parent == "":
+        return
+
+    try:
+        kwargs = {}
+        if SMB_USERNAME:
+            kwargs["username"] = SMB_USERNAME
+        if SMB_PASSWORD:
+            kwargs["password"] = SMB_PASSWORD
+
+        smbclient.mkdir(f"smb://{host}/{share}{parent}", **kwargs)
+    except Exception as exc:
+        # Директория может уже существовать, игнорируем некоторые ошибки
+        if "exist" not in str(exc).lower():
+            logging.warning("Ошибка при создании директории SMB %s: %s", smb_path, exc)
+
+
+def smb_copy_file(src: str, dst_smb: str) -> None:
+    """Скопировать локальный файл на SMB с опциональной аутентификацией."""
+    if not smbclient:
+        raise ImportError(
+            "smbprotocol не установлен. Установите: pip install smbprotocol"
+        )
+
+    host, share, path_on_share = parse_smb_path(dst_smb)
+
+    kwargs = {}
+    if SMB_USERNAME:
+        kwargs["username"] = SMB_USERNAME
+    if SMB_PASSWORD:
+        kwargs["password"] = SMB_PASSWORD
+
+    # Копируем локальный файл на SMB
+    with open(src, "rb") as local_file:
+        with smbclient.open_file(
+            f"smb://{host}/{share}{path_on_share}", mode="wb", **kwargs
+        ) as smb_file:
+            shutil.copyfileobj(local_file, smb_file)
 
 
 def setup_logging() -> None:
@@ -120,15 +207,27 @@ def build_manifest(check_stable: bool = True) -> Tuple[int, int, List[Dict]]:
 
 
 def copy_with_hash(src: str, dst: str, check_stable: bool = True) -> bool:
-    """Копировать файл с проверкой стабильности и сверкой SHA256."""
+    """Копировать файл с проверкой стабильности и сверкой SHA256.
+
+    Поддерживает как локальные пути, так и SMB пути (smb://host/share/path).
+    """
     for attempt in range(1, RETRY_COUNT + 1):
         try:
             if check_stable and not wait_for_stable_file(src):
                 logging.warning("Файл %s исчез до копирования", src)
                 return False
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
+
             src_hash = file_hash(src)
-            shutil.copy2(src, dst)
+
+            if is_smb_path(dst):
+                # Копирование на SMB
+                smb_makedirs(dst)
+                smb_copy_file(src, dst)
+            else:
+                # Копирование на локальную файловую систему
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                shutil.copy2(src, dst)
+
             os.remove(src)
             logging.info(
                 "Файл скопирован %s -> %s (попытка %s, hash=%s)",
