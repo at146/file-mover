@@ -89,7 +89,7 @@ def smb_makedirs(smb_path: str) -> None:
         if SMB_PASSWORD:
             kwargs["password"] = SMB_PASSWORD
 
-        smbclient.mkdir(f"smb://{host}/{share}{parent}", **kwargs)
+        smbclient.mkdir(rf"//{host}/{share}{parent}", **kwargs)
     except Exception as exc:
         # Директория может уже существовать, игнорируем некоторые ошибки
         if "exist" not in str(exc).lower():
@@ -114,7 +114,7 @@ def smb_copy_file(src: str, dst_smb: str) -> None:
     # Копируем локальный файл на SMB
     with open(src, "rb") as local_file:
         with smbclient.open_file(
-            f"smb://{host}/{share}{path_on_share}", mode="wb", **kwargs
+            rf"//{host}/{share}{path_on_share}", mode="wb", **kwargs
         ) as smb_file:
             shutil.copyfileobj(local_file, smb_file)
 
